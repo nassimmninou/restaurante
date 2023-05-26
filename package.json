@@ -18,6 +18,12 @@
   "@testing-library/user-event": "^13.5.0",
   
     
+  "axios": "^1.4.0",
+  
+    
+  "bootstrap": "^5.2.3",
+  
+    
   "google-map-react": "^2.2.0",
   
     
