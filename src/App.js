@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Axios from "axios";
-import Header from "./Header";
-import Footer from "./Footer";
+
 import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 
 
@@ -75,7 +74,6 @@ export default function App() {
 
   return (
     <>
-      <Header />
       
       <select value={selectedCity} onChange={handleCitySelect}>
         <option value="">Select a city</option>
@@ -118,7 +116,6 @@ export default function App() {
 
 
     </LoadScript>
-      <Footer />
     </>
   );
 }
