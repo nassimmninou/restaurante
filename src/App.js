@@ -2,32 +2,86 @@ import React, { useState, useEffect } from "react";
 import Axios from "axios";
 import Header from "./Header";
 import Footer from "./Footer";
-import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
+import { GoogleMap, LoadScript, Marker, DirectionsService, DirectionsRenderer } from "@react-google-maps/api";
 import "bootstrap/dist/css/bootstrap.min.css";
+import Button from 'react-bootstrap/Button';
 
 export default function App() {
   const [restaurants, setRestaurants] = useState([]);
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedZone, setSelectedZone] = useState("");
   const [selectedRestaurant, setSelectedRestaurant] = useState("");
-  const containerStyle = {
-    width: "400px",
-    height: "400px"
+  const [directions, setDirections] = useState(null);
+  const [showDirections, setShowDirections] = useState(false);
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [error, setError] = useState(null);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+
+  useEffect(() => {
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((permission) => {
+        if (permission.state === 'granted') {
+          setPermissionGranted(true);
+        } else {
+          setPermissionGranted(false);
+        }
+        permission.onchange = () => {
+          if (permission.state === 'granted') {
+            setPermissionGranted(true);
+          } else {
+            setPermissionGranted(false);
+          }
+        };
+      });
+    } else if (navigator.geolocation) {
+      setPermissionGranted(true);
+    } else {
+      setError('Geolocation is not supported by this browser.');
+    }
+  }, []);
+
+  const handlePermissionRequest = () => {
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((permission) => {
+          if (permission.state === 'granted') {
+            setPermissionGranted(true);
+          } else {
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                setLatitude(position.coords.latitude);
+                setLongitude(position.coords.longitude);
+                setPermissionGranted(true);
+              },
+              (error) => {
+                setError('Failed to retrieve location: ' + error.message);
+              }
+            );
+          }
+        })
+        .catch((error) => {
+          setError('Failed to request location permission: ' + error.message);
+        });
+    } else {
+      setError('Geolocation is not supported by this browser.');
+    }
   };
 
-  const center = {
-    lat: 0.0,
-    lng: 0.0
-  };
-
-  const zoom = 80;
-
-  const [selectedRestaurantLocation, setSelectedRestaurantLocation] = useState({
-    lat: 0.0,
-    lng: 0.0
-  });
-
-
+  useEffect(() => {
+    if (permissionGranted) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLatitude(position.coords.latitude);
+          setLongitude(position.coords.longitude);
+        },
+        (error) => {
+          setError('Failed to retrieve location: ' + error.message);
+        }
+      );
+    }
+  }, [permissionGranted]);
 
   const handleCitySelect = (event) => {
     setSelectedCity(event.target.value);
@@ -54,6 +108,30 @@ export default function App() {
     }
   };
 
+  const tracePath = () => {
+    if (latitude && longitude && selectedRestaurantLocation.lat && selectedRestaurantLocation.lng) {
+      const origin = { lat: latitude, lng: longitude, label: "Your location" };
+      const destination = { ...selectedRestaurantLocation, label: "Destination" };
+
+      const directionsServiceOptions = {
+        origin: origin,
+        destination: destination,
+        travelMode: 'DRIVING'
+      };
+
+      // Request directions from Directions Service
+      const directionsService = new window.google.maps.DirectionsService();
+      directionsService.route(directionsServiceOptions, (response, status) => {
+        if (status === "OK") {
+          setDirections(response);
+          setShowDirections(true);
+        } else {
+          console.log("Directions request failed with status:", status);
+        }
+      });
+    }
+  };
+
   useEffect(() => {
     if (selectedCity && selectedZone) {
       const startIndex = (selectedZone - 1) * 20;
@@ -64,11 +142,28 @@ export default function App() {
     }
   }, [selectedCity, selectedZone]);
 
+  const containerStyle = {
+    width: "400px",
+    height: "400px"
+  };
+
+  const center = {
+    lat: 0.0,
+    lng: 0.0
+  };
+
+  const zoom = 80;
+
+  const [selectedRestaurantLocation, setSelectedRestaurantLocation] = useState({
+    lat: 0.0,
+    lng: 0.0
+  });
+
   return (
     <>
       <Header />
       <span style={{ display: "block", height: "20px" }}></span>
-  
+
       <div className="container">
         <div className="row">
           <div className="col-md-6">
@@ -81,7 +176,7 @@ export default function App() {
                 {/* add more cities as needed */}
               </select>
             </div>
-  
+
             <div className="mb-3">
               <select className="form-select" aria-label="Default select example" value={selectedZone} onChange={handleZoneSelect}>
                 <option selected disabled>Select a zone</option>
@@ -91,7 +186,7 @@ export default function App() {
                 <option value="4">Zone 4</option>
               </select>
             </div>
-  
+
             <div className="mb-3">
               <select className="form-select" aria-label="Default select example" value={selectedRestaurant} onChange={handleRestaurantSelect}>
                 <option selected disabled>Select a restaurant</option>
@@ -102,17 +197,39 @@ export default function App() {
                 ))}
               </select>
             </div>
-  
+
             {selectedRestaurant && (
               <div className="container">
                 <h2>{selectedRestaurant}</h2>
+                <div>
+                  {latitude && longitude ? (
+                    <div>
+                      <Button onClick={tracePath} variant="primary">Show Itinerary</Button>
+                    </div>
+                  ) : (
+                    <div>
+                      {error ? (
+                        <div>{error}</div>
+                      ) : (
+                        <div>
+                          {permissionGranted ? (
+                            <div>Loading location...</div>
+                          ) : (
+                            <Button onClick={handlePermissionRequest} variant="primary">Enable location permission to show itinerary</Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {restaurants.map((restaurant) => {
                   if (restaurant.title === selectedRestaurant) {
                     // Calculate the number of filled stars based on the total score
                     const totalScore = restaurant.totalScore;
                     const filledStars = Math.floor(totalScore);
                     const hasHalfStar = totalScore % 1 !== 0;
-  
+
                     // Create an array of star elements
                     const stars = [];
                     for (let i = 0; i < 5; i++) {
@@ -126,7 +243,7 @@ export default function App() {
                       }
                       stars.push(<span key={i} className="star" style={{ color: starColor }}>&#9733;</span>);
                     }
-  
+
                     return (
                       <div className="card" key={restaurant._id}>
                         <div className="card-body">
@@ -144,7 +261,7 @@ export default function App() {
               </div>
             )}
           </div>
-  
+
           <div className="col-md-6">
             <LoadScript googleMapsApiKey="AIzaSyD0yMlmaWjIpewkPhPyFnOJHySVYeqvW-4">
               <GoogleMap
@@ -155,24 +272,32 @@ export default function App() {
                 }}
                 zoom={zoom}
               >
-                <Marker position={selectedRestaurantLocation} />
-                {restaurants.map((restaurant) => (
-                  <Marker
-                    key={restaurant._id}
-                    position={{
-                      lat: restaurant.location.coordinates[1],
-                      lng: restaurant.location.coordinates[0]
+<Marker position={origin} />
+{restaurants.map((restaurant) => (
+  <Marker
+    key={restaurant._id}
+    position={{
+      lat: restaurant.location.coordinates[1],
+      lng: restaurant.location.coordinates[0],
+      label: "Destination"
+    }}
+  />
+))}
+
+                {showDirections && directions && (
+                  <DirectionsRenderer
+                    options={{
+                      directions: directions
                     }}
                   />
-                ))}
+                )}
               </GoogleMap>
             </LoadScript>
           </div>
-          
         </div>
       </div>
-  
+
       <Footer />
     </>
   );
-                  }  
+}
